@@ -17,3 +17,6 @@ npm-debug.log*
 
 # OS junk
 .DS_Store
+
+# npm
+.npmrc

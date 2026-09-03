@@ -66,6 +66,11 @@ This command allows a fluent mode (_e.g._: `/gruntfoot theme load peachy` loads 
 
 ## Install
 
+### npm
+```bash
+pi install npm:@gsft/gruntfoot
+```
+
 ### Git
 
 ```bash

@@ -1,5 +1,5 @@
 {
-  "name": "@gruntsoft/gruntfoot",
+  "name": "@gsft/gruntfoot",
   "version": "0.5.0",
   "type": "module",
   "description": "A flexible footer customization extension for Pi coding agent, including a full-replacement footer with real-time color customization, themes, and an easy toggle option that persists across sessions.",
@@ -41,5 +41,9 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "node --test \"test/*.test.ts\""
+  },
+  "allowScripts": {
+    "protobufjs@7.6.5": true,
+    "@google/genai@1.52.0": true
   }
 }
