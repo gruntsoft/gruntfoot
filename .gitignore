@@ -1,0 +1,19 @@
+# Node dependencies
+node_modules/
+
+# pi project-scope runtime artifacts (auto-generated; .pi/settings.json stays tracked)
+# Package clones from `pi install -l`
+.pi/git/
+# npm package installs from `pi install -l`
+.pi/npm/
+# Project-local session files (only when sessionDir is project-scoped)
+.pi/sessions/
+
+# TypeScript build info (appears only if incremental builds are enabled)
+*.tsbuildinfo
+
+# npm logs
+npm-debug.log*
+
+# OS junk
+.DS_Store
