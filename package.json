@@ -1,6 +1,6 @@
 {
   "name": "@gsft/gruntfoot",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "A flexible footer customization extension for Pi coding agent, including a full-replacement footer with real-time color customization, themes, and an easy toggle option that persists across sessions.",
   "repository": {
