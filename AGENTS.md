@@ -86,8 +86,7 @@ prompts, skills, or extensions to pick them up live.
 
 ## Environment
 
-- This repository is hosted on a private Gitea instance at `gitea.zeal.home`, not GitHub. Never
-  assume GitHub URLs, APIs, or conventions.
+- This repository is hosted on GitHub at `github.com/gruntsoft/gruntfoot`.
 - pi API reference: `/home/victor/.config/nvm/versions/node/v24.19.0/lib/node_modules/@earendil-works/pi-coding-agent/docs`
   (especially `docs/extensions.md`) when working against extension APIs.
 
