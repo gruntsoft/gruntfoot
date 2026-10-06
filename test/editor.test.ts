@@ -78,11 +78,131 @@ test("render: chip coexists with the scroll arrow", () => {
 	const editor = makeEditor({ getSessionName: () => "my session" });
 	editor.setText(Array.from({ length: 60 }, (_, i) => `line ${i}`).join("\n"));
 	for (let i = 0; i < 12; i++) editor.handleInput("\x1b[A");
-	const lines = editor.render(40);
+	// The normalized indicator block is ~14 columns; render wide enough that the
+	// chip fits beside it (the stub theme's inverse form inflates the chip).
+	const lines = editor.render(60);
 	const bottom = stripTerminalSequences(lines[lines.length - 1]);
 	assert.match(bottom, /^─── ↓ \d+ more /);
 	assert.ok(bottom.includes(" my session "));
+	assert.equal(visibleWidth(bottom), 60);
+});
+
+test("render: centered scroll-arrow variant is left-normalized (pi-tui 1.0.4)", () => {
+	// pi-tui 1.0.4 centers the bottom-border scroll indicator when there is room:
+	// `────── ↓ 3 more ──────` instead of the left-anchored `─── ↓ 3 more `.
+	// gruntfoot re-normalizes it to pi-tui's own fallback form so the arrow block
+	// stays a constant ~13 columns regardless of where pi-tui centered it.
+	const prefix = "────── ↓ 3 more ";
+	const base = {
+		getText: () => "",
+		setText: () => {},
+		render: (width: number) => ["─".repeat(width), "", prefix + "─".repeat(width - prefix.length)],
+	} as unknown as EditorComponent;
+	const editor = makeEditor({ base, getSessionName: () => "my session" });
+	const lines = editor.render(40);
+	const bottom = stripTerminalSequences(lines[2]);
+	assert.match(bottom, /^─── ↓ 3 more /, bottom);
+	assert.ok(bottom.includes(" my session "), bottom);
 	assert.equal(visibleWidth(bottom), 40);
+});
+
+test("render: both borders' centered indicators are left-normalized", () => {
+	const topPrefix = "──── ↑ 36 more ";
+	const bottomPrefix = "────── ↓ 3 more ";
+	const base = {
+		getText: () => "",
+		setText: () => {},
+		render: (width: number) => [
+			topPrefix + "─".repeat(width - topPrefix.length),
+			"",
+			bottomPrefix + "─".repeat(width - bottomPrefix.length),
+		],
+	} as unknown as EditorComponent;
+	const editor = makeEditor({ base, getSessionName: () => "my session" });
+	const lines = editor.render(40);
+	const top = stripTerminalSequences(lines[0]);
+	assert.match(top, /^─── ↑ 36 more ─+$/, top);
+	assert.equal(visibleWidth(top), 40);
+	assert.ok(!top.includes(" my session "), top); // the chip never lands on the top border
+	const bottom = stripTerminalSequences(lines[2]);
+	assert.match(bottom, /^─── ↓ 3 more /, bottom);
+	assert.ok(bottom.includes(" my session "), bottom);
+	assert.equal(visibleWidth(bottom), 40);
+});
+
+test("render: 1–2-dash centered indicators (narrow panes) are normalized too", () => {
+	// Narrow panes: pi-tui centers with as little as one leading dash
+	// (`─ ↓ 12 more ──` at width 14), which the old `───`-prefix scan missed.
+	const base = {
+		getText: () => "",
+		setText: () => {},
+		render: (width: number) => ["─ ↑ 12 more ──", "", "─ ↓ 12 more ──"],
+	} as unknown as EditorComponent;
+	const editor = makeEditor({ base, getSessionName: () => "my session" });
+	const lines = editor.render(14);
+	const top = stripTerminalSequences(lines[0]);
+	assert.equal(top, "─── ↑ 12 more ");
+	assert.equal(visibleWidth(top), 14);
+	const bottom = stripTerminalSequences(lines[2]);
+	assert.equal(bottom, "─── ↓ 12 more ");
+	assert.equal(visibleWidth(bottom), 14);
+	assert.ok(!bottom.includes(" my session "), bottom); // chip yields at 14 columns
+
+	// Width 15: the two-dash centered form normalizes with one fill dash.
+	const base15 = {
+		getText: () => "",
+		setText: () => {},
+		render: (width: number) => ["─".repeat(width), "", "── ↓ 12 more ──"],
+	} as unknown as EditorComponent;
+	const bottom15 = stripTerminalSequences(makeEditor({ base: base15, getSessionName: () => "my session" }).render(15)[2]);
+	assert.equal(bottom15, "─── ↓ 12 more ─");
+	assert.equal(visibleWidth(bottom15), 15);
+});
+
+test("render: indicators narrower than the normalized form are left untouched", () => {
+	// Width 13: the centered form (`─ ↓ 12 more ─`) is one column short of the
+	// 14-column normalized form — normalizing would overflow, so keep pi-tui's.
+	const border = "─ ↓ 12 more ─";
+	const base = {
+		getText: () => "",
+		setText: () => {},
+		render: (width: number) => [border, "", border],
+	} as unknown as EditorComponent;
+	const editor = makeEditor({ base, getSessionName: () => "my session" });
+	const lines = editor.render(13);
+	assert.equal(stripTerminalSequences(lines[0]), border);
+	assert.equal(stripTerminalSequences(lines[2]), border);
+});
+
+test("render: left-anchored indicators keep their shape", () => {
+	const prefix = "─── ↓ 3 more ";
+	const base = {
+		getText: () => "",
+		setText: () => {},
+		render: (width: number) => ["─".repeat(width), "", prefix + "─".repeat(width - prefix.length)],
+	} as unknown as EditorComponent;
+	const editor = makeEditor({ base, getSessionName: () => "my session" });
+	const lines = editor.render(40);
+	const bottom = stripTerminalSequences(lines[2]);
+	assert.match(bottom, /^─── ↓ 3 more /, bottom);
+	assert.ok(bottom.includes(" my session "), bottom);
+	assert.equal(visibleWidth(bottom), 40);
+});
+
+test("render: truncated indicator is never overwritten by the chip", () => {
+	// pi-tui's ≤12-column ellipsis truncation of the indicator, plus its 6–7-column
+	// forms that slice the arrow and count away entirely (`───...`, `─── ...`).
+	const truncations = ["─── ↓ 1..." + "─".repeat(10), "───..." + "─".repeat(15), "─── ..." + "─".repeat(14)];
+	for (const truncated of truncations) {
+		const base = {
+			getText: () => "",
+			setText: () => {},
+			render: (width: number) => ["─".repeat(width), "", truncated],
+		} as unknown as EditorComponent;
+		const editor = makeEditor({ base, getSessionName: () => "my session" });
+		const lines = editor.render(20);
+		assert.equal(stripTerminalSequences(lines[2]), truncated);
+	}
 });
 
 test("render: chip yields when the terminal is too narrow", () => {
@@ -91,8 +211,24 @@ test("render: chip yields when the terminal is too narrow", () => {
 	for (let i = 0; i < 12; i++) editor.handleInput("\x1b[A");
 	const lines = editor.render(20);
 	const bottom = stripTerminalSequences(lines[lines.length - 1]);
-	assert.match(bottom, /^─── ↓ \d+ more /);
+	// The chip yields, and the indicator falls back to its left-normalized form
+	// (margin + label + dash fill) rather than the raw centered line.
+	assert.match(bottom, /^─── ↓ \d+ more ─+$/);
+	assert.equal(visibleWidth(bottom), 20);
 	assert.ok(!bottom.includes("a"), bottom);
+});
+
+test("render: the no-chip path still normalizes the bottom indicator", () => {
+	const editor = makeEditor();
+	editor.setText(Array.from({ length: 60 }, (_, i) => `line ${i}`).join("\n"));
+	for (let i = 0; i < 12; i++) editor.handleInput("\x1b[A");
+	const lines = editor.render(40);
+	const top = stripTerminalSequences(lines[0]);
+	assert.match(top, /^─── ↑ \d+ more ─+$/, top);
+	assert.equal(visibleWidth(top), 40);
+	const bottom = stripTerminalSequences(lines[lines.length - 1]);
+	assert.match(bottom, /^─── ↓ \d+ more ─+$/, bottom);
+	assert.equal(visibleWidth(bottom), 40);
 });
 
 test("render: chip lands on the border above autocomplete lines", () => {

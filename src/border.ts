@@ -1,7 +1,10 @@
 import { visibleWidth } from "@earendil-works/pi-tui";
 
 /**
- * Bottom-border builder for the editor separator + session-name chip.
+ * Border-line builder for the editor separator + session-name chip: preserves
+ * scroll indicators (the left-normalized indicator-only lines are built here
+ * for both the top and bottom border) and overlays the session chip (bottom
+ * border only).
  *
  * Pure layout logic with color functions injected, so it is fully unit
  * testable without a theme or terminal. The chip is right-aligned with a

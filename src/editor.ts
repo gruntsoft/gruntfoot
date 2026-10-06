@@ -1,13 +1,29 @@
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteProvider, EditorComponent, EditorTheme, TUI } from "@earendil-works/pi-tui";
-import { stripTerminalSequences } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { buildBottomBorder, type BorderStyle } from "./border.ts";
 import { colorizeText, type ResolvedColor, type ResolvedColors } from "./colors.ts";
 import { truncateName } from "./format.ts";
 
-/** Bottom border line shape: either a plain dash run or a scroll indicator. */
-const SCROLL_ARROW_RE = /^─── ↓ \d+ more /;
+/** Border scroll-indicator shape: dash margin, arrow (`↑` top / `↓` bottom),
+ * hidden-line count. pi-tui 1.0.4's createScrollBorder centers the indicator
+ * (`────── ↓ 3 more ──────`) when there is room and left-anchors it
+ * (`─── ↓ 3 more `) otherwise — `─+` covers both. The ≤12-column ellipsis
+ * truncations (`─── ↓ 1...`) do not match; they are already left-aligned and
+ * are left untouched (see rebuildBorder). */
+const SCROLL_ARROW_RE = /^─+ [↑↓] \d+ more /;
+
+/** Scroll-indicator margin: pi-tui's own left-anchored fallback form. */
+const SCROLL_MARGIN = "───";
+
+/** A rendered line counts as an editor border when it is a plain dash run
+ * (`───…`) or a scroll indicator (`─ ↓ 12 more ─` — centered forms can carry
+ * as little as one leading dash at narrow widths). */
+function isBorderLine(line: string): boolean {
+	const stripped = stripTerminalSequences(line);
+	return stripped.startsWith(SCROLL_MARGIN) || SCROLL_ARROW_RE.test(stripped);
+}
 
 /**
  * Callbacks the app wires onto the active editor (interactive-mode.js) that
@@ -190,32 +206,73 @@ export class GruntfootEditor extends CustomEditor {
 		const lines = this.base ? this.base.render(width) : super.render(width);
 		if (lines.length < 2) return lines;
 
-		// The bottom border is the last line that starts with the dash run;
-		// autocomplete lines render below it, so scan from the end.
+		// The top border is the first border line; the bottom border is the last
+		// (autocomplete lines render below it, so scan from the end). With a
+		// single border line it counts as the bottom only.
+		const topIndex = lines.findIndex(isBorderLine);
 		let borderIndex = -1;
 		for (let i = lines.length - 1; i >= 0; i--) {
-			if (stripTerminalSequences(lines[i]).startsWith("───")) {
+			if (isBorderLine(lines[i])) {
 				borderIndex = i;
 				break;
 			}
 		}
-		if (borderIndex < 0) return lines;
 
-		const sessionName = this.options.getSessionName?.();
-		if (!sessionName) return lines;
-		const chipName = truncateName(sessionName);
-		if (!chipName) return lines;
+		if (topIndex >= 0 && topIndex !== borderIndex) {
+			lines[topIndex] = this.rebuildBorder(lines[topIndex], width, null);
+		}
+		if (borderIndex >= 0) {
+			const sessionName = this.options.getSessionName?.();
+			const chipName = sessionName ? truncateName(sessionName) || null : null;
+			lines[borderIndex] = this.rebuildBorder(lines[borderIndex], width, chipName);
+		}
+		return lines;
+	}
 
-		const bottom = lines[borderIndex];
-		const match = SCROLL_ARROW_RE.exec(stripTerminalSequences(bottom));
-		const arrowText = match ? this.borderColor(match[0]) : null;
-		const style: BorderStyle = {
+	private borderStyle(): BorderStyle {
+		return {
 			dash: (text) => this.borderColor(text),
 			chip: (text) => this.chipStyle(text),
 		};
-		const rebuilt = buildBottomBorder(width, arrowText, chipName, style);
-		if (rebuilt !== null) lines[borderIndex] = rebuilt;
-		return lines;
+	}
+
+	/**
+	 * Rebuild a border line: a centered scroll indicator (pi-tui 1.0.4) is
+	 * left-normalized to pi-tui's own fallback form (`─── ↓ 3 more ` + dash
+	 * fill to exact width), and on the bottom border the session chip is
+	 * overlaid when it fits. Behavior by line shape:
+	 * - centered/left-anchored indicator → normalized indicator, plus the chip
+	 *   when it fits; when the chip does not fit, the normalized indicator-only
+	 *   line is kept (the chip yields, never the raw centered form).
+	 * - plain dash border → unchanged, plus the chip when one is given and fits.
+	 * - centered indicator narrower than the normalized form (a one-column
+	 *   window at the smallest centered width, e.g. 13 for 2-digit counts)
+	 *   → unchanged: normalizing would overflow the line.
+	 * - truncated indicator (`─── ↓ 1...`, or the 6–7-column forms where pi-tui
+	 *   slices the arrow away entirely: `───...`, `─── ...`) → unchanged, even
+	 *   with a chip: it is already left-aligned and must not be overwritten.
+	 */
+	private rebuildBorder(line: string, width: number, chipName: string | null): string {
+		const stripped = stripTerminalSequences(line);
+		const match = SCROLL_ARROW_RE.exec(stripped);
+		if (!match) {
+			// Truncated indicators end in pi-tui's ellipsis (which at ≤7 columns
+			// replaces the arrow and count), so the dots are the reliable marker.
+			const truncated = stripped.includes("↑") || stripped.includes("↓") || stripped.includes("...");
+			if (!chipName || truncated) return line;
+			const plain = buildBottomBorder(width, null, chipName, this.borderStyle());
+			return plain || line;
+		}
+		const normalized = match[0].replace(/^─+/, SCROLL_MARGIN);
+		if (visibleWidth(normalized) > width) return line;
+		const arrowText = this.borderColor(normalized);
+		const style = this.borderStyle();
+		if (chipName) {
+			const withChip = buildBottomBorder(width, arrowText, chipName, style);
+			if (withChip) return withChip;
+		}
+		const indicatorOnly = buildBottomBorder(width, arrowText, null, style);
+		return indicatorOnly || line;
 	}
 
 	private chipStyle(text: string): string {

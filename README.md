@@ -91,3 +91,14 @@ npm install
 npm run check # tsc --noEmit
 npm test # node --test test/ (no terminal or pi instance needed)
 ```
+
+### Manual testing
+
+TUI behavior isn't covered by the automated suite — run `pi -e .` and check:
+
+- **Editor separators and session chip** — name the session (a chip should appear on the editor's bottom border, right-aligned); type enough lines to scroll the editor and confirm the "↓ N more" scroll indicator coexists with the chip at typical widths and the chip yields on narrow ones. Scroll indicators on both the top and bottom borders are left-normalized to pi-tui's fallback form (`─── ↓ N more ` + dash fill) wherever that fixed-margin form fits; below that (the narrowest centered width) pi-tui's raw centered line is kept rather than overflowed. Separators stay accent-colored across thinking-level changes and in bash mode (`!` prefix).
+- **Footer contents** — model and thinking indicators, context bar (watch it switch low/medium/high coloring), usage/cost stats, path, and branch render in their configured colors.
+- **Footer heights** — the footer is 1–3 lines depending on terminal width and available data; no stray blank rows at any height.
+- **Zero-row footer** — if the footer errors, its render path returns `[]`: the layout must show no leftover blank row where the footer would be.
+- **Both TUI modes** — run through the above in regular and fullscreen modes. Fullscreen (`tuiMode: "fullscreen"`) is the pi 1.0.4 default; switch at runtime via the /settings "tui-mode" entry.
+- **Diagnostics** — set `PI_TUI_WRITE_LOG` to a file path to capture the raw ANSI written to the terminal when a render looks wrong.
